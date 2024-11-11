@@ -3,7 +3,6 @@ use std::io::{self, Cursor, ErrorKind, Read, Write};
 
 use std::fmt;
 use std::net::SocketAddr;
-use std::str::FromStr;
 
 use std::sync::mpsc::Sender;
 
@@ -156,7 +155,10 @@ where
         headers
             .iter()
             .find(|h: &&Header| h.field == header::CONTENT_LENGTH)
-            .and_then(|h| FromStr::from_str(h.value.as_str()).ok())
+            .and_then(|h| {
+                let value = h.value.to_str().ok()?;
+                value.parse().ok()
+            })
     };
 
     // true if the client sent a `Expect: 100-continue` header
@@ -164,7 +166,7 @@ where
         match headers
             .iter()
             .find(|h: &&Header| h.field == header::EXPECT)
-            .map(|h| h.value.as_str())
+            .and_then(|h| h.value.to_str().ok())
         {
             None => false,
             Some(v) if v.eq_ignore_ascii_case("100-continue") => true,
@@ -177,7 +179,7 @@ where
         match headers
             .iter()
             .find(|h: &&Header| h.field == header::CONNECTION)
-            .map(|h| h.value.as_str())
+            .and_then(|h| h.value.to_str().ok())
         {
             Some(v) if v.to_ascii_lowercase().contains("upgrade") => true,
             _ => false,
