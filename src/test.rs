@@ -1,5 +1,6 @@
-use crate::{request::new_request, HTTPVersion, Header, HeaderField, Method, Request};
+use crate::{request::new_request, HTTPVersion, Header, HeaderField, Request};
 use ascii::AsciiString;
+use http::Method;
 use std::net::SocketAddr;
 use std::str::FromStr;
 
@@ -9,9 +10,10 @@ use std::str::FromStr;
 /// with no headers. To create a `TestRequest` with different parameters, use the builder pattern:
 ///
 /// ```
-/// # use tiny_http::{Method, TestRequest};
+/// # use http::Method;
+/// # use tiny_http::TestRequest;
 /// let request = TestRequest::new()
-///     .with_method(Method::Post)
+///     .with_method(Method::POST)
 ///     .with_path("/api/widgets")
 ///     .with_body("42");
 /// ```
@@ -19,10 +21,11 @@ use std::str::FromStr;
 /// Then, convert the `TestRequest` into a real `Request` and pass it to the server under test:
 ///
 /// ```
-/// # use tiny_http::{http, Method, Request, Response, Server, TestRequest};
+/// # use http::Method;
+/// # use tiny_http::{Request, Response, Server, TestRequest};
 /// # use std::io::Cursor;
 /// # let request = TestRequest::new()
-/// #     .with_method(Method::Post)
+/// #     .with_method(Method::POST)
 /// #     .with_path("/api/widgets")
 /// #     .with_body("42");
 /// # struct TestServer {
@@ -84,7 +87,7 @@ impl Default for TestRequest {
             body: "",
             remote_addr: "127.0.0.1:23456".parse().unwrap(),
             secure: false,
-            method: Method::Get,
+            method: Method::GET,
             path: "/".to_string(),
             http_version: HTTPVersion::from((1, 1)),
             headers: Vec::new(),
