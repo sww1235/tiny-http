@@ -45,7 +45,7 @@ fn main() {
             let response = tiny_http::Response::from_file(file.unwrap());
 
             let response = response.with_header(tiny_http::Header {
-                field: "Content-Type".parse().unwrap(),
+                field: http::header::CONTENT_TYPE,
                 value: AsciiString::from_ascii(get_content_type(&path)).unwrap(),
             });
 

@@ -6,7 +6,9 @@ use std::io::Cursor;
 use std::io::Read;
 use std::thread::spawn;
 
+use http::header;
 use rustc_serialize::base64::{Config, Newline, Standard, ToBase64};
+use tiny_http::Header;
 
 fn home_page(port: u16) -> tiny_http::Response<Cursor<Vec<u8>>> {
     tiny_http::Response::from_string(format!(
@@ -77,7 +79,7 @@ fn main() {
             match request
                 .headers()
                 .iter()
-                .find(|h| h.field.equiv(&"Upgrade"))
+                .find(|h| h.field == header::UPGRADE)
                 .and_then(|hdr| {
                     if hdr.value == "websocket" {
                         Some(hdr)
@@ -97,7 +99,7 @@ fn main() {
             let key = match request
                 .headers()
                 .iter()
-                .find(|h| h.field.equiv(&"Sec-WebSocket-Key"))
+                .find(|h| h.field == header::SEC_WEBSOCKET_KEY)
                 .map(|h| h.value.clone())
             {
                 None => {
@@ -110,16 +112,11 @@ fn main() {
 
             // building the "101 Switching Protocols" response
             let response = tiny_http::Response::new_empty(http::StatusCode::SWITCHING_PROTOCOLS)
-                .with_header("Upgrade: websocket".parse::<tiny_http::Header>().unwrap())
-                .with_header("Connection: Upgrade".parse::<tiny_http::Header>().unwrap())
+                .with_header(Header::from_bytes(header::UPGRADE, "websocket").unwrap())
+                .with_header(Header::from_bytes(header::CONNECTION, "Upgrade").unwrap())
+                .with_header(Header::from_bytes(header::SEC_WEBSOCKET_PROTOCOL, "ping").unwrap())
                 .with_header(
-                    "Sec-WebSocket-Protocol: ping"
-                        .parse::<tiny_http::Header>()
-                        .unwrap(),
-                )
-                .with_header(
-                    format!("Sec-WebSocket-Accept: {}", convert_key(key.as_str()))
-                        .parse::<tiny_http::Header>()
+                    Header::from_bytes(header::SEC_WEBSOCKET_ACCEPT, convert_key(key.as_str()))
                         .unwrap(),
                 );
 
