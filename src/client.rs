@@ -1,5 +1,5 @@
 use ascii::AsciiString;
-use http::{Method, Version};
+use http::{header, Method, Version};
 
 use std::io::Error as IoError;
 use std::io::Result as IoResult;
@@ -244,7 +244,7 @@ impl Iterator for ClientConnection {
             let connection_header = rq
                 .headers()
                 .iter()
-                .find(|h| h.field.equiv("Connection"))
+                .find(|h| h.field == header::CONNECTION)
                 .map(|h| h.value.as_str());
 
             let lowercase = connection_header.map(|h| h.to_ascii_lowercase());
