@@ -6,7 +6,7 @@ use std::io::Cursor;
 use std::io::Read;
 use std::thread::spawn;
 
-use http::header;
+use http::{header, HeaderValue};
 use rustc_serialize::base64::{Config, Newline, Standard, ToBase64};
 use tiny_http::Header;
 
@@ -33,11 +33,10 @@ fn home_page(port: u16) -> tiny_http::Response<Cursor<Vec<u8>>> {
     ",
         port
     ))
-    .with_header(
-        "Content-type: text/html"
-            .parse::<tiny_http::Header>()
-            .unwrap(),
-    )
+    .with_header(Header {
+        field: header::CONTENT_TYPE,
+        value: HeaderValue::from_static("text/html"),
+    })
 }
 
 /// Turns a Sec-WebSocket-Key into a Sec-WebSocket-Accept.
@@ -100,7 +99,7 @@ fn main() {
                 .headers()
                 .iter()
                 .find(|h| h.field == header::SEC_WEBSOCKET_KEY)
-                .map(|h| h.value.clone())
+                .and_then(|h| h.value.to_str().ok())
             {
                 None => {
                     let response = tiny_http::Response::new_empty(http::StatusCode::BAD_REQUEST);
@@ -116,8 +115,7 @@ fn main() {
                 .with_header(Header::from_bytes(header::CONNECTION, "Upgrade").unwrap())
                 .with_header(Header::from_bytes(header::SEC_WEBSOCKET_PROTOCOL, "ping").unwrap())
                 .with_header(
-                    Header::from_bytes(header::SEC_WEBSOCKET_ACCEPT, convert_key(key.as_str()))
-                        .unwrap(),
+                    Header::from_bytes(header::SEC_WEBSOCKET_ACCEPT, convert_key(key)).unwrap(),
                 );
 
             //

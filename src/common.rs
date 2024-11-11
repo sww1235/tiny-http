@@ -1,5 +1,4 @@
-use ascii::AsciiString;
-use http::HeaderName;
+use http::{HeaderName, HeaderValue};
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
 
@@ -7,7 +6,7 @@ use std::str::FromStr;
 #[derive(Debug, Clone)]
 pub struct Header {
     pub field: HeaderName,
-    pub value: AsciiString,
+    pub value: HeaderValue,
 }
 
 impl Header {
@@ -25,7 +24,7 @@ impl Header {
         B2: Into<Vec<u8>> + AsRef<[u8]>,
     {
         let header = HeaderName::from_bytes(header.as_ref()).or(Err(()))?;
-        let value = AsciiString::from_ascii(value).or(Err(()))?;
+        let value = HeaderValue::from_bytes(value.as_ref()).or(Err(()))?;
 
         Ok(Header {
             field: header,
@@ -43,7 +42,7 @@ impl FromStr for Header {
         let field = elems.next().and_then(|f| f.parse().ok()).ok_or(())?;
         let value = elems
             .next()
-            .and_then(|v| AsciiString::from_ascii(v.trim()).ok())
+            .and_then(|v| HeaderValue::from_str(v.trim()).ok())
             .ok_or(())?;
 
         Ok(Header { field, value })
@@ -51,8 +50,10 @@ impl FromStr for Header {
 }
 
 impl Display for Header {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(formatter, "{}: {}", self.field, self.value.as_str())
+    fn fmt(&self, _formatter: &mut Formatter<'_>) -> Result<(), fmt::Error> {
+        // XXX(cosmic): `http` likely intentionally doesn't impl this, so we probably shouldn't
+        // either
+        todo!();
     }
 }
 
@@ -67,7 +68,7 @@ mod test {
         let header: Header = "Content-Type: text/html".parse().unwrap();
 
         assert_eq!(header.field, http::header::CONTENT_TYPE);
-        assert!(header.value.as_str() == "text/html");
+        assert_eq!(header.value, "text/html");
 
         assert!("hello world".parse::<Header>().is_err());
     }
@@ -84,7 +85,7 @@ mod test {
         let header: Header = "Time: 20: 34".parse().unwrap();
 
         assert_eq!(header.field, "time");
-        assert!(header.value.as_str() == "20: 34");
+        assert_eq!(header.value.to_str().unwrap(), "20: 34");
     }
 
     // This tests reslstance to RUSTSEC-2020-0031: "HTTP Request smuggling
