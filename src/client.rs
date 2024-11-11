@@ -1,4 +1,5 @@
 use ascii::AsciiString;
+use http::Method;
 
 use std::io::Error as IoError;
 use std::io::Result as IoResult;
@@ -7,7 +8,7 @@ use std::io::{BufReader, BufWriter, ErrorKind, Read};
 use std::net::SocketAddr;
 use std::str::FromStr;
 
-use crate::common::{HTTPVersion, Method};
+use crate::common::HTTPVersion;
 use crate::util::RefinedTcpStream;
 use crate::util::{SequentialReader, SequentialReaderBuilder, SequentialWriterBuilder};
 use crate::Request;
@@ -301,7 +302,7 @@ mod test {
     fn test_parse_request_line() {
         let (method, path, ver) = super::parse_request_line("GET /hello HTTP/1.1").unwrap();
 
-        assert!(method == crate::Method::Get);
+        assert!(method == http::Method::GET);
         assert!(path == "/hello");
         assert!(ver == crate::common::HTTPVersion(1, 1));
 

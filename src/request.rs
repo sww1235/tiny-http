@@ -8,9 +8,9 @@ use std::str::FromStr;
 use std::sync::mpsc::Sender;
 
 use crate::util::{EqualReader, FusedReader};
-use crate::{HTTPVersion, Header, Method, Response};
+use crate::{HTTPVersion, Header, Response};
 use chunked_transfer::Decoder;
-use http::StatusCode;
+use http::{Method, StatusCode};
 
 /// Represents an HTTP request made by a client.
 ///
@@ -447,7 +447,7 @@ impl Request {
     {
         let mut writer = self.extract_writer_impl();
 
-        let do_not_send_body = self.method == Method::Head;
+        let do_not_send_body = self.method == Method::HEAD;
 
         Self::ignore_client_closing_errors(response.raw_print(
             writer.by_ref(),
