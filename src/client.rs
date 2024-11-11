@@ -245,7 +245,7 @@ impl Iterator for ClientConnection {
                 .headers()
                 .iter()
                 .find(|h| h.field == header::CONNECTION)
-                .map(|h| h.value.as_str());
+                .and_then(|h| h.value.to_str().ok());
 
             let lowercase = connection_header.map(|h| h.to_ascii_lowercase());
 
