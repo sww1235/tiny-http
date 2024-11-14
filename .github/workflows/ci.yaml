@@ -39,7 +39,6 @@ jobs:
         rust:
           - stable
           - nightly
-          - "1.60"
         features:
           - default
           - ssl-openssl
@@ -64,3 +63,24 @@ jobs:
         with:
           command: test
           args: --features ${{ matrix.features }}
+
+  msrv_test:
+    name: Build & Test on MSRV
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: "1.60"
+          override: true
+
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+
+      - name: Test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
