@@ -30,6 +30,7 @@ rustls-pemfile = { version = "2.2", optional = true }
 rustls-pki-types = { version = "1.9", optional = true }
 zeroize = { version = "1", optional = true }
 native-tls = { version = "0.2", optional = true }
+http = "1.1.0"
 
 [dev-dependencies]
 rustc-serialize = "0.3"

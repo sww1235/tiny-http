@@ -19,7 +19,7 @@ use std::str::FromStr;
 /// Then, convert the `TestRequest` into a real `Request` and pass it to the server under test:
 ///
 /// ```
-/// # use tiny_http::{Method, Request, Response, Server, StatusCode, TestRequest};
+/// # use tiny_http::{http, Method, Request, Response, Server, TestRequest};
 /// # use std::io::Cursor;
 /// # let request = TestRequest::new()
 /// #     .with_method(Method::Post)
@@ -37,7 +37,7 @@ use std::str::FromStr;
 /// #     }
 /// # }
 /// let response = server.handle_request(request.into());
-/// assert_eq!(response.status_code(), StatusCode(200));
+/// assert_eq!(response.status_code(), http::StatusCode::OK);
 /// ```
 pub struct TestRequest {
     body: &'static str,

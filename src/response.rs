@@ -1,4 +1,5 @@
-use crate::common::{HTTPVersion, Header, StatusCode};
+use crate::common::{HTTPVersion, Header};
+use http::StatusCode;
 use httpdate::HttpDate;
 use std::cmp::Ordering;
 use std::sync::mpsc::Receiver;
@@ -88,11 +89,8 @@ where
     // writing status line
     write!(
         &mut writer,
-        "HTTP/{}.{} {} {}\r\n",
-        http_version.0,
-        http_version.1,
-        status_code.0,
-        status_code.default_reason_phrase()
+        "HTTP/{}.{} {}\r\n",
+        http_version.0, http_version.1, status_code,
     )?;
 
     // writing headers
@@ -127,7 +125,7 @@ fn choose_transfer_encoding(
     // Per section 3.3.1 of RFC7230:
     // A server MUST NOT send a Transfer-Encoding header field in any response with a status code
     // of 1xx (Informational) or 204 (No Content).
-    if status_code.0 < 200 || status_code.0 == 204 {
+    if status_code.is_informational() || status_code == StatusCode::NO_CONTENT {
         return TransferEncoding::Identity;
     }
 
@@ -391,7 +389,7 @@ where
 
         // checking whether to ignore the body of the response
         let do_not_send_body = do_not_send_body
-            || match self.status_code.0 {
+            || match self.status_code.as_u16() {
                 // status code 1xx, 204 and 304 MUST not include a body
                 100..=199 | 204 | 304 => true,
                 _ => false,
@@ -493,13 +491,7 @@ impl Response<File> {
     pub fn from_file(file: File) -> Response<File> {
         let file_size = file.metadata().ok().map(|v| v.len() as usize);
 
-        Response::new(
-            StatusCode(200),
-            Vec::with_capacity(0),
-            file,
-            file_size,
-            None,
-        )
+        Response::new(StatusCode::OK, Vec::with_capacity(0), file, file_size, None)
     }
 }
 
@@ -512,7 +504,7 @@ impl Response<Cursor<Vec<u8>>> {
         let data_len = data.len();
 
         Response::new(
-            StatusCode(200),
+            StatusCode::OK,
             Vec::with_capacity(0),
             Cursor::new(data),
             Some(data_len),
@@ -528,7 +520,7 @@ impl Response<Cursor<Vec<u8>>> {
         let data_len = data.len();
 
         Response::new(
-            StatusCode(200),
+            StatusCode::OK,
             vec![
                 Header::from_bytes(&b"Content-Type"[..], &b"text/plain; charset=UTF-8"[..])
                     .unwrap(),
