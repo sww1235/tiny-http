@@ -8,8 +8,9 @@ use std::str::FromStr;
 use std::sync::mpsc::Sender;
 
 use crate::util::{EqualReader, FusedReader};
-use crate::{HTTPVersion, Header, Method, Response, StatusCode};
+use crate::{HTTPVersion, Header, Method, Response};
 use chunked_transfer::Decoder;
+use http::StatusCode;
 
 /// Represents an HTTP request made by a client.
 ///
@@ -360,7 +361,7 @@ impl Request {
     #[inline]
     pub fn as_reader(&mut self) -> &mut dyn Read {
         if self.must_send_continue {
-            let msg = Response::new_empty(StatusCode(100));
+            let msg = Response::new_empty(StatusCode::CONTINUE);
             msg.raw_print(
                 self.response_writer.as_mut().unwrap().by_ref(),
                 self.http_version.clone(),
@@ -488,7 +489,7 @@ impl fmt::Debug for Request {
 impl Drop for Request {
     fn drop(&mut self) {
         if self.response_writer.is_some() {
-            let response = Response::empty(500);
+            let response = Response::empty(StatusCode::INTERNAL_SERVER_ERROR);
             let _ = self.respond_impl(response); // ignoring any potential error
             if let Some(sender) = self.notify_when_responded.take() {
                 let _ = sender.send(());
