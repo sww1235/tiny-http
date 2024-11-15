@@ -51,7 +51,7 @@ fn main() {
 
             let _ = rq.respond(response);
         } else {
-            let rep = tiny_http::Response::new_empty(tiny_http::StatusCode(404));
+            let rep = tiny_http::Response::new_empty(http::StatusCode::NOT_FOUND);
             let _ = rq.respond(rep);
         }
     }

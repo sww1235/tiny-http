@@ -101,7 +101,7 @@ fn main() {
                 .map(|h| h.value.clone())
             {
                 None => {
-                    let response = tiny_http::Response::new_empty(tiny_http::StatusCode(400));
+                    let response = tiny_http::Response::new_empty(http::StatusCode::BAD_REQUEST);
                     request.respond(response).expect("Responded");
                     return;
                 }
@@ -109,7 +109,7 @@ fn main() {
             };
 
             // building the "101 Switching Protocols" response
-            let response = tiny_http::Response::new_empty(tiny_http::StatusCode(101))
+            let response = tiny_http::Response::new_empty(http::StatusCode::SWITCHING_PROTOCOLS)
                 .with_header("Upgrade: websocket".parse::<tiny_http::Header>().unwrap())
                 .with_header("Connection: Upgrade".parse::<tiny_http::Header>().unwrap())
                 .with_header(
