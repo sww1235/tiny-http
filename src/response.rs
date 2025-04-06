@@ -1,5 +1,4 @@
-use crate::common::Header;
-use http::{header, StatusCode, Version};
+use http::{header, HeaderName, HeaderValue, StatusCode, Version};
 use httpdate::HttpDate;
 use std::cmp::Ordering;
 use std::sync::mpsc::Receiver;
@@ -41,7 +40,7 @@ use std::time::SystemTime;
 pub struct Response<R> {
     reader: R,
     status_code: StatusCode,
-    headers: Vec<Header>,
+    headers: Vec<(HeaderName, HeaderValue)>,
     data_length: Option<usize>,
     chunked_threshold: Option<usize>,
 }
@@ -72,16 +71,16 @@ impl FromStr for TransferEncoding {
 }
 
 /// Builds a Date: header with the current date.
-fn build_date_header() -> Header {
+fn build_date_header() -> (HeaderName, HeaderValue) {
     let d = HttpDate::from(SystemTime::now());
-    Header::from_bytes(header::DATE, d.to_string()).unwrap()
+    (header::DATE, d.to_string().parse().unwrap())
 }
 
 fn write_message_header<W>(
     mut writer: W,
     http_version: &Version,
     status_code: &StatusCode,
-    headers: &[Header],
+    headers: &[(HeaderName, HeaderValue)],
 ) -> IoResult<()>
 where
     W: Write,
@@ -91,9 +90,9 @@ where
 
     // writing headers
     for header in headers.iter() {
-        writer.write_all(header.field.as_str().as_ref())?;
+        writer.write_all(header.0.as_str().as_ref())?;
         write!(&mut writer, ": ")?;
-        writer.write_all(header.value.as_bytes())?;
+        writer.write_all(header.1.as_bytes())?;
         write!(&mut writer, "\r\n")?;
     }
 
@@ -105,7 +104,7 @@ where
 
 fn choose_transfer_encoding(
     status_code: StatusCode,
-    request_headers: &[Header],
+    request_headers: &[(HeaderName, HeaderValue)],
     http_version: &Version,
     entity_length: &Option<usize>,
     has_additional_headers: bool,
@@ -129,9 +128,9 @@ fn choose_transfer_encoding(
     let user_request = request_headers
         .iter()
         // finding TE
-        .find(|h| h.field == header::TE)
+        .find(|h| h.0 == header::TE)
         // getting its value
-        .and_then(|h| h.value.to_str().ok())
+        .and_then(|h| h.1.to_str().ok())
         // getting the corresponding TransferEncoding
         .and_then(|value| {
             // getting list of requested elements
@@ -189,10 +188,10 @@ where
     /// All the other arguments are straight-forward.
     pub fn new(
         status_code: StatusCode,
-        headers: Vec<Header>,
+        headers: Vec<(HeaderName, HeaderValue)>,
         data: R,
         data_length: Option<usize>,
-        additional_headers: Option<Receiver<Header>>,
+        additional_headers: Option<Receiver<(HeaderName, HeaderValue)>>,
     ) -> Response<R> {
         let mut response = Response {
             reader: data,
@@ -202,14 +201,14 @@ where
             chunked_threshold: None,
         };
 
-        for h in headers {
-            response.add_header(h)
+        for (name, value) in headers {
+            response.add_header(name, value);
         }
 
         // dummy implementation
         if let Some(additional_headers) = additional_headers {
-            for h in additional_headers.iter() {
-                response.add_header(h)
+            for (name, value) in additional_headers.iter() {
+                response.add_header(name, value);
             }
         }
 
@@ -242,12 +241,7 @@ where
 
     /// Adds a header to the list.
     /// Does all the checks.
-    pub fn add_header<H>(&mut self, header: H)
-    where
-        H: Into<Header>,
-    {
-        let header = header.into();
-
+    pub fn add_header(&mut self, name: HeaderName, value: HeaderValue) {
         // ignoring forbidden headers
         if [
             header::CONNECTION,
@@ -255,36 +249,31 @@ where
             header::TRANSFER_ENCODING,
             header::UPGRADE,
         ]
-        .contains(&header.field)
+        .contains(&name)
         {
             return;
         }
 
         // if the header is Content-Length, setting the data length
-        if header.field == header::CONTENT_LENGTH {
-            if let Some(val) = header
-                .value
-                .to_str()
-                .ok()
-                .and_then(|v| usize::from_str(v).ok())
-            {
+        if name == header::CONTENT_LENGTH {
+            if let Some(val) = value.to_str().ok().and_then(|v| usize::from_str(v).ok()) {
                 self.data_length = Some(val)
             }
 
             return;
         // if the header is Content-Type and it's already set, overwrite it
-        } else if header.field == header::CONTENT_TYPE {
+        } else if name == header::CONTENT_TYPE {
             if let Some(content_type_header) = self
                 .headers
                 .iter_mut()
-                .find(|h| h.field == header::CONTENT_TYPE)
+                .find(|h| h.0 == header::CONTENT_TYPE)
             {
-                content_type_header.value = header.value;
+                content_type_header.1 = value;
                 return;
             }
         }
 
-        self.headers.push(header);
+        self.headers.push((name, value));
     }
 
     /// Returns the same request, but with an additional header.
@@ -292,11 +281,8 @@ where
     /// Some headers cannot be modified and some other have a
     ///  special behavior. See the documentation above.
     #[inline]
-    pub fn with_header<H>(mut self, header: H) -> Response<R>
-    where
-        H: Into<Header>,
-    {
-        self.add_header(header.into());
+    pub fn with_header(mut self, name: HeaderName, value: HeaderValue) -> Response<R> {
+        self.add_header(name, value);
         self
     }
 
@@ -337,7 +323,7 @@ where
         mut self,
         mut writer: W,
         http_version: Version,
-        request_headers: &[Header],
+        request_headers: &[(HeaderName, HeaderValue)],
         do_not_send_body: bool,
         upgrade: Option<&str>,
     ) -> IoResult<()> {
@@ -351,28 +337,24 @@ where
         ));
 
         // add `Date` if not in the headers
-        if !self.headers.iter().any(|h| h.field == header::DATE) {
+        if !self.headers.iter().any(|h| h.0 == header::DATE) {
             self.headers.insert(0, build_date_header());
         }
 
         // add `Server` if not in the headers
-        if !self.headers.iter().any(|h| h.field == header::SERVER) {
+        if !self.headers.iter().any(|h| h.0 == header::SERVER) {
             self.headers.insert(
                 0,
-                Header::from_bytes(header::SERVER, b"tiny-http (Rust)").unwrap(),
+                (header::SERVER, HeaderValue::from_static("tiny-http (Rust)")),
             );
         }
 
         // handling upgrade
         if let Some(upgrade) = upgrade {
-            self.headers.insert(
-                0,
-                Header::from_bytes(header::UPGRADE, upgrade.as_bytes()).unwrap(),
-            );
-            self.headers.insert(
-                0,
-                Header::from_bytes(header::CONNECTION, b"upgrade").unwrap(),
-            );
+            self.headers
+                .insert(0, (header::UPGRADE, upgrade.parse().unwrap()));
+            self.headers
+                .insert(0, (header::CONNECTION, HeaderValue::from_static("upgrade")));
             transfer_encoding = None;
         }
 
@@ -401,17 +383,19 @@ where
 
         // preparing headers for transfer
         match transfer_encoding {
-            Some(TransferEncoding::Chunked) => self
-                .headers
-                .push(Header::from_bytes(header::TRANSFER_ENCODING, b"chunked").unwrap()),
+            Some(TransferEncoding::Chunked) => self.headers.push((
+                header::TRANSFER_ENCODING,
+                HeaderValue::from_static("chunked"),
+            )),
 
             Some(TransferEncoding::Identity) => {
                 assert!(data_length.is_some());
                 let data_length = data_length.unwrap();
 
-                self.headers.push(
-                    Header::from_bytes(header::CONTENT_LENGTH, data_length.to_string()).unwrap(),
-                )
+                self.headers.push((
+                    header::CONTENT_LENGTH,
+                    data_length.to_string().parse().unwrap(),
+                ))
             }
 
             _ => (),
@@ -462,7 +446,7 @@ where
     }
 
     /// Retrieves the current list of `Response` headers
-    pub fn headers(&self) -> &[Header] {
+    pub fn headers(&self) -> &[(HeaderName, HeaderValue)] {
         &self.headers
     }
 }
@@ -521,7 +505,10 @@ impl Response<Cursor<Vec<u8>>> {
 
         Response::new(
             StatusCode::OK,
-            vec![Header::from_bytes(header::CONTENT_TYPE, b"text/plain; charset=UTF-8").unwrap()],
+            vec![(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("text/plain; charset=UTF-8"),
+            )],
             Cursor::new(data.into_bytes()),
             Some(data_len),
             None,
