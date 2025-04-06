@@ -1,5 +1,5 @@
-use crate::{request::new_request, Header, Request};
-use http::{header, HeaderValue, Method, Version};
+use crate::{request::new_request, Request};
+use http::{header, HeaderName, HeaderValue, Method, Version};
 use std::net::SocketAddr;
 
 /// A simpler version of [`Request`] that is useful for testing. No data actually goes anywhere.
@@ -48,7 +48,7 @@ pub struct TestRequest {
     method: Method,
     path: String,
     http_version: Version,
-    headers: Vec<Header>,
+    headers: Vec<(HeaderName, HeaderValue)>,
 }
 
 impl From<TestRequest> for Request {
@@ -58,12 +58,12 @@ impl From<TestRequest> for Request {
         if !mock
             .headers
             .iter_mut()
-            .any(|h| h.field == header::CONTENT_LENGTH)
+            .any(|h| h.0 == header::CONTENT_LENGTH)
         {
-            mock.headers.push(Header {
-                field: header::CONTENT_LENGTH,
-                value: HeaderValue::from_str(&mock.body.len().to_string()).unwrap(),
-            });
+            mock.headers.push((
+                header::CONTENT_LENGTH,
+                HeaderValue::from_str(&mock.body.len().to_string()).unwrap(),
+            ));
         }
         new_request(
             mock.secure,
@@ -121,8 +121,8 @@ impl TestRequest {
         self.http_version = version;
         self
     }
-    pub fn with_header(mut self, header: Header) -> Self {
-        self.headers.push(header);
+    pub fn with_header(mut self, name: HeaderName, value: HeaderValue) -> Self {
+        self.headers.push((name, value));
         self
     }
 }

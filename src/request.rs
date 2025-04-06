@@ -7,9 +7,9 @@ use std::net::SocketAddr;
 use std::sync::mpsc::Sender;
 
 use crate::util::{EqualReader, FusedReader};
-use crate::{Header, Response};
+use crate::Response;
 use chunked_transfer::Decoder;
-use http::{header, Method, StatusCode, Version};
+use http::{header, HeaderName, HeaderValue, Method, StatusCode, Version};
 
 /// Represents an HTTP request made by a client.
 ///
@@ -65,7 +65,7 @@ pub struct Request {
 
     http_version: Version,
 
-    headers: Vec<Header>,
+    headers: Vec<(HeaderName, HeaderValue)>,
 
     body_length: Option<usize>,
 
@@ -131,7 +131,7 @@ pub fn new_request<R, W>(
     method: Method,
     path: String,
     version: Version,
-    headers: Vec<Header>,
+    headers: Vec<(HeaderName, HeaderValue)>,
     remote_addr: Option<SocketAddr>,
     mut source_data: R,
     writer: W,
@@ -143,8 +143,8 @@ where
     // finding the transfer-encoding header
     let transfer_encoding = headers
         .iter()
-        .find(|h| h.field == header::TRANSFER_ENCODING)
-        .map(|h| h.value.clone());
+        .find(|h| h.0 == header::TRANSFER_ENCODING)
+        .map(|h| h.1.clone());
 
     // finding the content-length header
     let content_length = if transfer_encoding.is_some() {
@@ -154,9 +154,9 @@ where
     } else {
         headers
             .iter()
-            .find(|h: &&Header| h.field == header::CONTENT_LENGTH)
+            .find(|h| h.0 == header::CONTENT_LENGTH)
             .and_then(|h| {
-                let value = h.value.to_str().ok()?;
+                let value = h.1.to_str().ok()?;
                 value.parse().ok()
             })
     };
@@ -165,8 +165,8 @@ where
     let expects_continue = {
         match headers
             .iter()
-            .find(|h: &&Header| h.field == header::EXPECT)
-            .and_then(|h| h.value.to_str().ok())
+            .find(|h| h.0 == header::EXPECT)
+            .and_then(|h| h.1.to_str().ok())
         {
             None => false,
             Some(v) if v.eq_ignore_ascii_case("100-continue") => true,
@@ -178,8 +178,8 @@ where
     let connection_upgrade = {
         match headers
             .iter()
-            .find(|h: &&Header| h.field == header::CONNECTION)
-            .and_then(|h| h.value.to_str().ok())
+            .find(|h| h.0 == header::CONNECTION)
+            .and_then(|h| h.1.to_str().ok())
         {
             Some(v) if v.to_ascii_lowercase().contains("upgrade") => true,
             _ => false,
@@ -265,7 +265,7 @@ impl Request {
 
     /// Returns a list of all headers sent by the client.
     #[inline]
-    pub fn headers(&self) -> &[Header] {
+    pub fn headers(&self) -> &[(HeaderName, HeaderValue)] {
         &self.headers
     }
 
