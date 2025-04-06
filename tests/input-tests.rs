@@ -5,6 +5,8 @@ use std::net::Shutdown;
 use std::sync::mpsc;
 use std::thread;
 
+use http::header;
+
 #[allow(dead_code)]
 mod support;
 
@@ -106,11 +108,8 @@ fn custom_content_type_response_header() {
     let request = server.recv().unwrap();
     request
         .respond(
-            tiny_http::Response::from_string("{\"custom\": \"Content-Type\"}").with_header(
-                "Content-Type: application/json"
-                    .parse::<tiny_http::Header>()
-                    .unwrap(),
-            ),
+            tiny_http::Response::from_string("{\"custom\": \"Content-Type\"}")
+                .with_header(header::CONTENT_TYPE, "application/json".parse().unwrap()),
         )
         .unwrap();
 

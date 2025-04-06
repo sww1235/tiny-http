@@ -8,7 +8,6 @@ use std::thread::spawn;
 
 use http::{header, HeaderValue};
 use rustc_serialize::base64::{Config, Newline, Standard, ToBase64};
-use tiny_http::Header;
 
 fn home_page(port: u16) -> tiny_http::Response<Cursor<Vec<u8>>> {
     tiny_http::Response::from_string(format!(
@@ -33,10 +32,7 @@ fn home_page(port: u16) -> tiny_http::Response<Cursor<Vec<u8>>> {
     ",
         port
     ))
-    .with_header(Header {
-        field: header::CONTENT_TYPE,
-        value: HeaderValue::from_static("text/html"),
-    })
+    .with_header(header::CONTENT_TYPE, HeaderValue::from_static("text/html"))
 }
 
 /// Turns a Sec-WebSocket-Key into a Sec-WebSocket-Accept.
@@ -78,9 +74,9 @@ fn main() {
             match request
                 .headers()
                 .iter()
-                .find(|h| h.field == header::UPGRADE)
+                .find(|(name, _)| name == header::UPGRADE)
                 .and_then(|hdr| {
-                    if hdr.value == "websocket" {
+                    if hdr.1 == "websocket" {
                         Some(hdr)
                     } else {
                         None
@@ -98,8 +94,8 @@ fn main() {
             let key = match request
                 .headers()
                 .iter()
-                .find(|h| h.field == header::SEC_WEBSOCKET_KEY)
-                .and_then(|h| h.value.to_str().ok())
+                .find(|(name, _)| name == header::SEC_WEBSOCKET_KEY)
+                .and_then(|(_, value)| value.to_str().ok())
             {
                 None => {
                     let response = tiny_http::Response::new_empty(http::StatusCode::BAD_REQUEST);
@@ -111,11 +107,12 @@ fn main() {
 
             // building the "101 Switching Protocols" response
             let response = tiny_http::Response::new_empty(http::StatusCode::SWITCHING_PROTOCOLS)
-                .with_header(Header::from_bytes(header::UPGRADE, "websocket").unwrap())
-                .with_header(Header::from_bytes(header::CONNECTION, "Upgrade").unwrap())
-                .with_header(Header::from_bytes(header::SEC_WEBSOCKET_PROTOCOL, "ping").unwrap())
+                .with_header(header::UPGRADE, "websocket".parse().unwrap())
+                .with_header(header::CONNECTION, "Upgrade".parse().unwrap())
+                .with_header(header::SEC_WEBSOCKET_PROTOCOL, "ping".parse().unwrap())
                 .with_header(
-                    Header::from_bytes(header::SEC_WEBSOCKET_ACCEPT, convert_key(key)).unwrap(),
+                    header::SEC_WEBSOCKET_ACCEPT,
+                    convert_key(key).parse().unwrap(),
                 );
 
             //

@@ -6,8 +6,8 @@ use std::io::Result as IoResult;
 use std::io::{BufReader, BufWriter, ErrorKind, Read};
 
 use std::net::SocketAddr;
-use std::str::FromStr;
 
+use crate::common;
 use crate::util::RefinedTcpStream;
 use crate::util::{SequentialReader, SequentialReaderBuilder, SequentialWriterBuilder};
 use crate::Request;
@@ -123,7 +123,7 @@ impl ClientConnection {
                     if line.is_empty() {
                         break;
                     };
-                    headers.push(match FromStr::from_str(line.as_str().trim()) {
+                    headers.push(match common::header_from_str(line.as_str().trim()) {
                         // TODO: remove this conversion
                         Ok(h) => h,
                         _ => return Err(ReadError::WrongHeader(version)),
@@ -244,8 +244,8 @@ impl Iterator for ClientConnection {
             let connection_header = rq
                 .headers()
                 .iter()
-                .find(|h| h.field == header::CONNECTION)
-                .and_then(|h| h.value.to_str().ok());
+                .find(|h| h.0 == header::CONNECTION)
+                .and_then(|h| h.1.to_str().ok());
 
             let lowercase = connection_header.map(|h| h.to_ascii_lowercase());
 

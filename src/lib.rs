@@ -114,7 +114,6 @@ use client::ClientConnection;
 use connection::Connection;
 use util::MessagesQueue;
 
-pub use common::Header;
 pub use connection::{ConfigListenAddr, ListenAddr, Listener};
 pub use request::{ReadWrite, Request};
 pub use response::{Response, ResponseBox};
