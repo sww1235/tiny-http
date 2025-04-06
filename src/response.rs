@@ -1,4 +1,4 @@
-use http::{header, HeaderName, HeaderValue, StatusCode, Version};
+use http::{header, HeaderMap, HeaderName, HeaderValue, StatusCode, Version};
 use httpdate::HttpDate;
 use std::cmp::Ordering;
 use std::sync::mpsc::Receiver;
@@ -40,7 +40,7 @@ use std::time::SystemTime;
 pub struct Response<R> {
     reader: R,
     status_code: StatusCode,
-    headers: Vec<(HeaderName, HeaderValue)>,
+    headers: HeaderMap,
     data_length: Option<usize>,
     chunked_threshold: Option<usize>,
 }
@@ -71,16 +71,16 @@ impl FromStr for TransferEncoding {
 }
 
 /// Builds a Date: header with the current date.
-fn build_date_header() -> (HeaderName, HeaderValue) {
+fn date_header_value() -> HeaderValue {
     let d = HttpDate::from(SystemTime::now());
-    (header::DATE, d.to_string().parse().unwrap())
+    d.to_string().parse().unwrap()
 }
 
 fn write_message_header<W>(
     mut writer: W,
     http_version: &Version,
     status_code: &StatusCode,
-    headers: &[(HeaderName, HeaderValue)],
+    headers: &HeaderMap,
 ) -> IoResult<()>
 where
     W: Write,
@@ -104,7 +104,7 @@ where
 
 fn choose_transfer_encoding(
     status_code: StatusCode,
-    request_headers: &[(HeaderName, HeaderValue)],
+    request_headers: &HeaderMap,
     http_version: &Version,
     entity_length: &Option<usize>,
     has_additional_headers: bool,
@@ -126,11 +126,10 @@ fn choose_transfer_encoding(
 
     // parsing the request's TE header
     let user_request = request_headers
-        .iter()
         // finding TE
-        .find(|h| h.0 == header::TE)
+        .get(header::TE)
         // getting its value
-        .and_then(|h| h.1.to_str().ok())
+        .and_then(|value| value.to_str().ok())
         // getting the corresponding TransferEncoding
         .and_then(|value| {
             // getting list of requested elements
@@ -188,7 +187,7 @@ where
     /// All the other arguments are straight-forward.
     pub fn new(
         status_code: StatusCode,
-        headers: Vec<(HeaderName, HeaderValue)>,
+        headers: HeaderMap,
         data: R,
         data_length: Option<usize>,
         additional_headers: Option<Receiver<(HeaderName, HeaderValue)>>,
@@ -196,13 +195,20 @@ where
         let mut response = Response {
             reader: data,
             status_code,
-            headers: Vec::with_capacity(16),
+            headers: HeaderMap::with_capacity(16),
             data_length,
             chunked_threshold: None,
         };
 
+        // TODO: this can probably be done with some kind of filtering instead
+        let persist_name = None;
         for (name, value) in headers {
-            response.add_header(name, value);
+            // INVARIANT:
+            // > For each yielded item that has `None` provided for the `HeaderName`, then the
+            // > associated header name is the same as that of the previously yielded item. The
+            // > first yielded item will have `HeaderName` set.
+            let persist_name = name.or(persist_name.clone());
+            response.add_header(persist_name.unwrap(), value);
         }
 
         // dummy implementation
@@ -263,17 +269,11 @@ where
             return;
         // if the header is Content-Type and it's already set, overwrite it
         } else if name == header::CONTENT_TYPE {
-            if let Some(content_type_header) = self
-                .headers
-                .iter_mut()
-                .find(|h| h.0 == header::CONTENT_TYPE)
-            {
-                content_type_header.1 = value;
-                return;
-            }
+            let _ = self.headers.insert(header::CONTENT_TYPE, value);
+            return;
         }
 
-        self.headers.push((name, value));
+        self.headers.append(name, value);
     }
 
     /// Returns the same request, but with an additional header.
@@ -323,10 +323,22 @@ where
         mut self,
         mut writer: W,
         http_version: Version,
-        request_headers: &[(HeaderName, HeaderValue)],
+        request_headers: &HeaderMap,
         do_not_send_body: bool,
         upgrade: Option<&str>,
     ) -> IoResult<()> {
+        fn insert_first_header(headers: &mut HeaderMap, name: HeaderName, value: HeaderValue) {
+            match headers.entry(name) {
+                header::Entry::Occupied(mut occupied) => {
+                    let existing: Vec<_> = occupied.insert_mult(value).collect();
+                    for e in existing {
+                        occupied.append(e);
+                    }
+                }
+                header::Entry::Vacant(vacant) => _ = vacant.insert(value),
+            }
+        }
+
         let mut transfer_encoding = Some(choose_transfer_encoding(
             self.status_code,
             request_headers,
@@ -337,24 +349,21 @@ where
         ));
 
         // add `Date` if not in the headers
-        if !self.headers.iter().any(|h| h.0 == header::DATE) {
-            self.headers.insert(0, build_date_header());
+        if let header::Entry::Vacant(entry) = self.headers.entry(header::DATE) {
+            entry.insert(date_header_value());
         }
 
         // add `Server` if not in the headers
-        if !self.headers.iter().any(|h| h.0 == header::SERVER) {
-            self.headers.insert(
-                0,
-                (header::SERVER, HeaderValue::from_static("tiny-http (Rust)")),
-            );
+        if let header::Entry::Vacant(entry) = self.headers.entry(header::SERVER) {
+            entry.insert(HeaderValue::from_static("tiny-http (Rust)"));
         }
 
         // handling upgrade
         if let Some(upgrade) = upgrade {
-            self.headers
-                .insert(0, (header::UPGRADE, upgrade.parse().unwrap()));
-            self.headers
-                .insert(0, (header::CONNECTION, HeaderValue::from_static("upgrade")));
+            let upgrade_val = upgrade.parse().unwrap();
+            insert_first_header(&mut self.headers, header::UPGRADE, upgrade_val);
+            let connection_val = header::UPGRADE.into();
+            insert_first_header(&mut self.headers, header::CONNECTION, connection_val);
             transfer_encoding = None;
         }
 
@@ -383,19 +392,21 @@ where
 
         // preparing headers for transfer
         match transfer_encoding {
-            Some(TransferEncoding::Chunked) => self.headers.push((
-                header::TRANSFER_ENCODING,
-                HeaderValue::from_static("chunked"),
-            )),
+            Some(TransferEncoding::Chunked) => {
+                self.headers.append(
+                    header::TRANSFER_ENCODING,
+                    HeaderValue::from_static("chunked"),
+                );
+            }
 
             Some(TransferEncoding::Identity) => {
                 assert!(data_length.is_some());
                 let data_length = data_length.unwrap();
 
-                self.headers.push((
+                self.headers.append(
                     header::CONTENT_LENGTH,
                     data_length.to_string().parse().unwrap(),
-                ))
+                );
             }
 
             _ => (),
@@ -446,7 +457,7 @@ where
     }
 
     /// Retrieves the current list of `Response` headers
-    pub fn headers(&self) -> &[(HeaderName, HeaderValue)] {
+    pub fn headers(&self) -> &HeaderMap {
         &self.headers
     }
 }
@@ -475,7 +486,7 @@ impl Response<File> {
     pub fn from_file(file: File) -> Response<File> {
         let file_size = file.metadata().ok().map(|v| v.len() as usize);
 
-        Response::new(StatusCode::OK, Vec::with_capacity(0), file, file_size, None)
+        Response::new(StatusCode::OK, HeaderMap::new(), file, file_size, None)
     }
 }
 
@@ -489,7 +500,7 @@ impl Response<Cursor<Vec<u8>>> {
 
         Response::new(
             StatusCode::OK,
-            Vec::with_capacity(0),
+            HeaderMap::new(),
             Cursor::new(data),
             Some(data_len),
             None,
@@ -505,10 +516,11 @@ impl Response<Cursor<Vec<u8>>> {
 
         Response::new(
             StatusCode::OK,
-            vec![(
+            std::iter::once((
                 header::CONTENT_TYPE,
                 HeaderValue::from_static("text/plain; charset=UTF-8"),
-            )],
+            ))
+            .collect(),
             Cursor::new(data.into_bytes()),
             Some(data_len),
             None,
@@ -524,7 +536,7 @@ impl Response<io::Empty> {
     {
         Response::new(
             status_code.into(),
-            Vec::with_capacity(0),
+            HeaderMap::new(),
             io::empty(),
             Some(0),
             None,

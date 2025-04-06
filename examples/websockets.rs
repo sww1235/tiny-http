@@ -71,31 +71,19 @@ fn main() {
         // we are handling this websocket connection in a new task
         spawn(move || {
             // checking the "Upgrade" header to check that it is a websocket
-            match request
-                .headers()
-                .iter()
-                .find(|(name, _)| name == header::UPGRADE)
-                .and_then(|hdr| {
-                    if hdr.1 == "websocket" {
-                        Some(hdr)
-                    } else {
-                        None
-                    }
-                }) {
-                None => {
-                    // sending the HTML page
-                    request.respond(home_page(port)).expect("Responded");
-                    return;
-                }
-                _ => (),
-            };
+            if request.headers().get(header::UPGRADE)
+                == Some(&HeaderValue::from_static("websocket"))
+            {
+                // sending the HTML page
+                request.respond(home_page(port)).expect("Responded");
+                return;
+            }
 
             // getting the value of Sec-WebSocket-Key
             let key = match request
                 .headers()
-                .iter()
-                .find(|(name, _)| name == header::SEC_WEBSOCKET_KEY)
-                .and_then(|(_, value)| value.to_str().ok())
+                .get(header::SEC_WEBSOCKET_KEY)
+                .and_then(|value| value.to_str().ok())
             {
                 None => {
                     let response = tiny_http::Response::new_empty(http::StatusCode::BAD_REQUEST);
@@ -107,9 +95,12 @@ fn main() {
 
             // building the "101 Switching Protocols" response
             let response = tiny_http::Response::new_empty(http::StatusCode::SWITCHING_PROTOCOLS)
-                .with_header(header::UPGRADE, "websocket".parse().unwrap())
-                .with_header(header::CONNECTION, "Upgrade".parse().unwrap())
-                .with_header(header::SEC_WEBSOCKET_PROTOCOL, "ping".parse().unwrap())
+                .with_header(header::UPGRADE, HeaderValue::from_static("websocket"))
+                .with_header(header::CONNECTION, header::UPGRADE.into())
+                .with_header(
+                    header::SEC_WEBSOCKET_PROTOCOL,
+                    HeaderValue::from_static("ping"),
+                )
                 .with_header(
                     header::SEC_WEBSOCKET_ACCEPT,
                     convert_key(key).parse().unwrap(),
