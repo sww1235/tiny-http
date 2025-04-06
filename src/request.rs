@@ -9,7 +9,7 @@ use std::sync::mpsc::Sender;
 use crate::util::{EqualReader, FusedReader};
 use crate::Response;
 use chunked_transfer::Decoder;
-use http::{header, HeaderName, HeaderValue, Method, StatusCode, Version};
+use http::{header, HeaderMap, Method, StatusCode, Version};
 
 /// Represents an HTTP request made by a client.
 ///
@@ -65,7 +65,7 @@ pub struct Request {
 
     http_version: Version,
 
-    headers: Vec<(HeaderName, HeaderValue)>,
+    headers: HeaderMap,
 
     body_length: Option<usize>,
 
@@ -131,7 +131,7 @@ pub fn new_request<R, W>(
     method: Method,
     path: String,
     version: Version,
-    headers: Vec<(HeaderName, HeaderValue)>,
+    headers: HeaderMap,
     remote_addr: Option<SocketAddr>,
     mut source_data: R,
     writer: W,
@@ -141,10 +141,7 @@ where
     W: Write + Send + 'static,
 {
     // finding the transfer-encoding header
-    let transfer_encoding = headers
-        .iter()
-        .find(|h| h.0 == header::TRANSFER_ENCODING)
-        .map(|h| h.1.clone());
+    let transfer_encoding = headers.get(header::TRANSFER_ENCODING).cloned();
 
     // finding the content-length header
     let content_length = if transfer_encoding.is_some() {
@@ -153,37 +150,27 @@ where
         None
     } else {
         headers
-            .iter()
-            .find(|h| h.0 == header::CONTENT_LENGTH)
-            .and_then(|h| {
-                let value = h.1.to_str().ok()?;
-                value.parse().ok()
-            })
+            .get(header::CONTENT_LENGTH)
+            .and_then(|value| value.to_str().ok()?.parse().ok())
     };
 
     // true if the client sent a `Expect: 100-continue` header
-    let expects_continue = {
-        match headers
-            .iter()
-            .find(|h| h.0 == header::EXPECT)
-            .and_then(|h| h.1.to_str().ok())
-        {
-            None => false,
-            Some(v) if v.eq_ignore_ascii_case("100-continue") => true,
-            _ => return Err(RequestCreationError::ExpectationFailed),
-        }
+    let expects_continue = match headers
+        .get(header::EXPECT)
+        .and_then(|value| value.to_str().ok())
+    {
+        None => false,
+        Some(v) if v.eq_ignore_ascii_case("100-continue") => true,
+        _ => return Err(RequestCreationError::ExpectationFailed),
     };
 
     // true if the client sent a `Connection: upgrade` header
-    let connection_upgrade = {
-        match headers
-            .iter()
-            .find(|h| h.0 == header::CONNECTION)
-            .and_then(|h| h.1.to_str().ok())
-        {
-            Some(v) if v.to_ascii_lowercase().contains("upgrade") => true,
-            _ => false,
-        }
+    let connection_upgrade = match headers
+        .get(header::CONNECTION)
+        .and_then(|value| value.to_str().ok())
+    {
+        Some(v) if v.to_ascii_lowercase().contains("upgrade") => true,
+        _ => false,
     };
 
     // we wrap `source_data` around a reading whose nature depends on the transfer-encoding and
@@ -265,7 +252,7 @@ impl Request {
 
     /// Returns a list of all headers sent by the client.
     #[inline]
-    pub fn headers(&self) -> &[(HeaderName, HeaderValue)] {
+    pub fn headers(&self) -> &HeaderMap {
         &self.headers
     }
 

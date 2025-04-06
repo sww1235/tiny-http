@@ -1,5 +1,5 @@
 use ascii::AsciiString;
-use http::{header, Method, Version};
+use http::{header, HeaderMap, Method, Version};
 
 use std::io::Error as IoError;
 use std::io::Result as IoResult;
@@ -116,18 +116,16 @@ impl ClientConnection {
 
             // getting all headers
             let headers = {
-                let mut headers = Vec::new();
+                let mut headers = HeaderMap::new();
                 loop {
                     let line = self.read_next_line().map_err(ReadError::ReadIoError)?;
 
                     if line.is_empty() {
                         break;
                     };
-                    headers.push(match common::header_from_str(line.as_str().trim()) {
-                        // TODO: remove this conversion
-                        Ok(h) => h,
-                        _ => return Err(ReadError::WrongHeader(version)),
-                    });
+                    let (name, value) = common::header_from_str(line.as_str().trim())
+                        .map_err(|_| ReadError::WrongHeader(version))?;
+                    headers.append(name, value);
                 }
 
                 headers
@@ -191,7 +189,7 @@ impl Iterator for ClientConnection {
                     let writer = self.sink.next().unwrap();
                     let response = Response::new_empty(StatusCode::BAD_REQUEST);
                     response
-                        .raw_print(writer, Version::HTTP_11, &[], false, None)
+                        .raw_print(writer, Version::HTTP_11, &HeaderMap::new(), false, None)
                         .ok();
                     return None; // we don't know where the next request would start,
                                  // se we have to close
@@ -200,7 +198,9 @@ impl Iterator for ClientConnection {
                 Err(ReadError::WrongHeader(ver)) => {
                     let writer = self.sink.next().unwrap();
                     let response = Response::new_empty(StatusCode::BAD_REQUEST);
-                    response.raw_print(writer, ver, &[], false, None).ok();
+                    response
+                        .raw_print(writer, ver, &HeaderMap::new(), false, None)
+                        .ok();
                     return None; // we don't know where the next request would start,
                                  // se we have to close
                 }
@@ -210,7 +210,7 @@ impl Iterator for ClientConnection {
                     let writer = self.sink.next().unwrap();
                     let response = Response::new_empty(StatusCode::REQUEST_TIMEOUT);
                     response
-                        .raw_print(writer, Version::HTTP_11, &[], false, None)
+                        .raw_print(writer, Version::HTTP_11, &HeaderMap::new(), false, None)
                         .ok();
                     return None; // closing the connection
                 }
@@ -218,7 +218,9 @@ impl Iterator for ClientConnection {
                 Err(ReadError::ExpectationFailed(ver)) => {
                     let writer = self.sink.next().unwrap();
                     let response = Response::new_empty(StatusCode::EXPECTATION_FAILED);
-                    response.raw_print(writer, ver, &[], true, None).ok();
+                    response
+                        .raw_print(writer, ver, &HeaderMap::new(), true, None)
+                        .ok();
                     return None; // TODO: should be recoverable, but needs handling in case of body
                 }
 
@@ -235,7 +237,7 @@ impl Iterator for ClientConnection {
                 )
                 .with_status_code(StatusCode::HTTP_VERSION_NOT_SUPPORTED);
                 response
-                    .raw_print(writer, Version::HTTP_11, &[], false, None)
+                    .raw_print(writer, Version::HTTP_11, &HeaderMap::new(), false, None)
                     .ok();
                 continue;
             }
@@ -243,9 +245,8 @@ impl Iterator for ClientConnection {
             // updating the status of the connection
             let connection_header = rq
                 .headers()
-                .iter()
-                .find(|h| h.0 == header::CONNECTION)
-                .and_then(|h| h.1.to_str().ok());
+                .get(header::CONNECTION)
+                .and_then(|value| value.to_str().ok());
 
             let lowercase = connection_header.map(|h| h.to_ascii_lowercase());
 
