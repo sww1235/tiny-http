@@ -1,5 +1,4 @@
 use ascii::{AsciiStr, AsciiString, FromAsciiError};
-use std::cmp::Ordering;
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
 
@@ -102,68 +101,6 @@ impl PartialEq for HeaderField {
         let self_str: &str = self.as_str().as_ref();
         let other_str = other.as_str().as_ref();
         self_str.eq_ignore_ascii_case(other_str)
-    }
-}
-
-/// HTTP version (usually 1.0 or 1.1).
-#[allow(clippy::upper_case_acronyms)]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HTTPVersion(pub u8, pub u8);
-
-impl Display for HTTPVersion {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(formatter, "{}.{}", self.0, self.1)
-    }
-}
-
-impl Ord for HTTPVersion {
-    fn cmp(&self, other: &Self) -> Ordering {
-        let HTTPVersion(my_major, my_minor) = *self;
-        let HTTPVersion(other_major, other_minor) = *other;
-
-        if my_major != other_major {
-            return my_major.cmp(&other_major);
-        }
-
-        my_minor.cmp(&other_minor)
-    }
-}
-
-impl PartialOrd for HTTPVersion {
-    fn partial_cmp(&self, other: &HTTPVersion) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl PartialEq<(u8, u8)> for HTTPVersion {
-    fn eq(&self, &(major, minor): &(u8, u8)) -> bool {
-        self.eq(&HTTPVersion(major, minor))
-    }
-}
-
-impl PartialEq<HTTPVersion> for (u8, u8) {
-    fn eq(&self, other: &HTTPVersion) -> bool {
-        let &(major, minor) = self;
-        HTTPVersion(major, minor).eq(other)
-    }
-}
-
-impl PartialOrd<(u8, u8)> for HTTPVersion {
-    fn partial_cmp(&self, &(major, minor): &(u8, u8)) -> Option<Ordering> {
-        self.partial_cmp(&HTTPVersion(major, minor))
-    }
-}
-
-impl PartialOrd<HTTPVersion> for (u8, u8) {
-    fn partial_cmp(&self, other: &HTTPVersion) -> Option<Ordering> {
-        let &(major, minor) = self;
-        HTTPVersion(major, minor).partial_cmp(other)
-    }
-}
-
-impl From<(u8, u8)> for HTTPVersion {
-    fn from((major, minor): (u8, u8)) -> HTTPVersion {
-        HTTPVersion(major, minor)
     }
 }
 

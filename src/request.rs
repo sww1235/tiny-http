@@ -8,9 +8,9 @@ use std::str::FromStr;
 use std::sync::mpsc::Sender;
 
 use crate::util::{EqualReader, FusedReader};
-use crate::{HTTPVersion, Header, Response};
+use crate::{Header, Response};
 use chunked_transfer::Decoder;
-use http::{Method, StatusCode};
+use http::{Method, StatusCode, Version};
 
 /// Represents an HTTP request made by a client.
 ///
@@ -64,7 +64,7 @@ pub struct Request {
 
     path: String,
 
-    http_version: HTTPVersion,
+    http_version: Version,
 
     headers: Vec<Header>,
 
@@ -131,7 +131,7 @@ pub fn new_request<R, W>(
     secure: bool,
     method: Method,
     path: String,
-    version: HTTPVersion,
+    version: Version,
     headers: Vec<Header>,
     remote_addr: Option<SocketAddr>,
     mut source_data: R,
@@ -269,7 +269,7 @@ impl Request {
 
     /// Returns the HTTP version of the request.
     #[inline]
-    pub fn http_version(&self) -> &HTTPVersion {
+    pub fn http_version(&self) -> &Version {
         &self.http_version
     }
 
