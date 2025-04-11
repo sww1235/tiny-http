@@ -1,5 +1,5 @@
-use crate::common::{HTTPVersion, Header};
-use http::StatusCode;
+use crate::common::Header;
+use http::{StatusCode, Version};
 use httpdate::HttpDate;
 use std::cmp::Ordering;
 use std::sync::mpsc::Receiver;
@@ -79,7 +79,7 @@ fn build_date_header() -> Header {
 
 fn write_message_header<W>(
     mut writer: W,
-    http_version: &HTTPVersion,
+    http_version: &Version,
     status_code: &StatusCode,
     headers: &[Header],
 ) -> IoResult<()>
@@ -87,11 +87,7 @@ where
     W: Write,
 {
     // writing status line
-    write!(
-        &mut writer,
-        "HTTP/{}.{} {}\r\n",
-        http_version.0, http_version.1, status_code,
-    )?;
+    write!(&mut writer, "{:?} {}\r\n", http_version, status_code)?;
 
     // writing headers
     for header in headers.iter() {
@@ -110,7 +106,7 @@ where
 fn choose_transfer_encoding(
     status_code: StatusCode,
     request_headers: &[Header],
-    http_version: &HTTPVersion,
+    http_version: &Version,
     entity_length: &Option<usize>,
     has_additional_headers: bool,
     chunked_threshold: usize,
@@ -118,7 +114,7 @@ fn choose_transfer_encoding(
     use crate::util;
 
     // HTTP 1.0 doesn't support other encoding
-    if *http_version <= (1, 0) {
+    if *http_version <= Version::HTTP_10 {
         return TransferEncoding::Identity;
     }
 
@@ -332,7 +328,7 @@ where
     pub fn raw_print<W: Write>(
         mut self,
         mut writer: W,
-        http_version: HTTPVersion,
+        http_version: Version,
         request_headers: &[Header],
         do_not_send_body: bool,
         upgrade: Option<&str>,
