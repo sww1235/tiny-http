@@ -1,5 +1,5 @@
 use ascii::AsciiString;
-use http::{header, HeaderMap, Method, Version};
+use http::{header, HeaderMap, HeaderName, HeaderValue, Method, Version};
 
 use std::io::Error as IoError;
 use std::io::Result as IoResult;
@@ -7,7 +7,6 @@ use std::io::{BufReader, BufWriter, ErrorKind, Read};
 
 use std::net::SocketAddr;
 
-use crate::common;
 use crate::util::RefinedTcpStream;
 use crate::util::{SequentialReader, SequentialReaderBuilder, SequentialWriterBuilder};
 use crate::Request;
@@ -123,8 +122,13 @@ impl ClientConnection {
                     if line.is_empty() {
                         break;
                     };
-                    let (name, value) = common::header_from_str(line.as_str().trim())
-                        .map_err(|_| ReadError::WrongHeader(version))?;
+
+                    // parse the header from the line
+                    let header = line.as_str().trim();
+                    let wrong_header = || ReadError::WrongHeader(version);
+                    let (name, value) = header.split_once(':').ok_or_else(wrong_header)?;
+                    let name: HeaderName = name.parse().map_err(|_| wrong_header())?;
+                    let value = HeaderValue::from_str(value.trim()).map_err(|_| wrong_header())?;
                     headers.append(name, value);
                 }
 
