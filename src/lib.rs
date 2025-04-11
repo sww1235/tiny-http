@@ -120,7 +120,6 @@ pub use response::{Response, ResponseBox};
 pub use test::TestRequest;
 
 mod client;
-mod common;
 mod connection;
 mod log;
 mod request;
