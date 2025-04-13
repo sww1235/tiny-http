@@ -9,7 +9,7 @@ use std::sync::mpsc::Sender;
 use crate::util::{EqualReader, FusedReader};
 use crate::Response;
 use chunked_transfer::Decoder;
-use http::{header, HeaderMap, Method, StatusCode, Version};
+use http::{header, HeaderMap, Method, StatusCode, Uri, Version};
 
 /// Represents an HTTP request made by a client.
 ///
@@ -61,7 +61,7 @@ pub struct Request {
 
     method: Method,
 
-    path: String,
+    path: Uri,
 
     http_version: Version,
 
@@ -129,7 +129,7 @@ impl From<IoError> for RequestCreationError {
 pub fn new_request<R, W>(
     secure: bool,
     method: Method,
-    path: String,
+    path: Uri,
     version: Version,
     headers: HeaderMap,
     remote_addr: Option<SocketAddr>,
@@ -246,7 +246,7 @@ impl Request {
 
     /// Returns the resource requested by the client.
     #[inline]
-    pub fn url(&self) -> &str {
+    pub fn url(&self) -> &Uri {
         &self.path
     }
 

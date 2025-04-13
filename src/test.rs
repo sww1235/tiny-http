@@ -1,5 +1,5 @@
 use crate::{request::new_request, Request};
-use http::{header, HeaderMap, HeaderName, HeaderValue, Method, Version};
+use http::{header, HeaderMap, HeaderName, HeaderValue, Method, Uri, Version};
 use std::net::SocketAddr;
 
 /// A simpler version of [`Request`] that is useful for testing. No data actually goes anywhere.
@@ -8,23 +8,23 @@ use std::net::SocketAddr;
 /// with no headers. To create a `TestRequest` with different parameters, use the builder pattern:
 ///
 /// ```
-/// # use http::Method;
+/// # use http::{Method, Uri};
 /// # use tiny_http::TestRequest;
 /// let request = TestRequest::new()
 ///     .with_method(Method::POST)
-///     .with_path("/api/widgets")
+///     .with_path(Uri::from_static("/api/widgets"))
 ///     .with_body("42");
 /// ```
 ///
 /// Then, convert the `TestRequest` into a real `Request` and pass it to the server under test:
 ///
 /// ```
-/// # use http::Method;
+/// # use http::{Method, Uri};
 /// # use tiny_http::{Request, Response, Server, TestRequest};
 /// # use std::io::Cursor;
 /// # let request = TestRequest::new()
 /// #     .with_method(Method::POST)
-/// #     .with_path("/api/widgets")
+/// #     .with_path(Uri::from_static("/api/widgets"))
 /// #     .with_body("42");
 /// # struct TestServer {
 /// #     listener: Server,
@@ -46,7 +46,7 @@ pub struct TestRequest {
     // true if HTTPS, false if HTTP
     secure: bool,
     method: Method,
-    path: String,
+    path: Uri,
     http_version: Version,
     headers: HeaderMap,
 }
@@ -79,7 +79,7 @@ impl Default for TestRequest {
             remote_addr: "127.0.0.1:23456".parse().unwrap(),
             secure: false,
             method: Method::GET,
-            path: "/".to_string(),
+            path: Uri::default(),
             http_version: Version::HTTP_11,
             headers: HeaderMap::new(),
         }
@@ -106,8 +106,8 @@ impl TestRequest {
         self.method = method;
         self
     }
-    pub fn with_path(mut self, path: &str) -> Self {
-        self.path = path.to_string();
+    pub fn with_path(mut self, path: Uri) -> Self {
+        self.path = path;
         self
     }
     pub fn with_http_version(mut self, version: Version) -> Self {
