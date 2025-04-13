@@ -1,4 +1,5 @@
 use ascii::AsciiString;
+use http::Uri;
 use http::{header, HeaderMap, HeaderName, HeaderValue, Method, Version};
 
 use std::io::Error as IoError;
@@ -288,11 +289,11 @@ fn parse_http_version(version: &str) -> Result<Version, ReadError> {
 
 /// Parses the request line of the request.
 /// eg. GET / HTTP/1.1
-fn parse_request_line(line: &str) -> Result<(Method, String, Version), ReadError> {
+fn parse_request_line(line: &str) -> Result<(Method, Uri, Version), ReadError> {
     let mut parts = line.split(' ');
 
     let method = parts.next().and_then(|w| w.parse().ok());
-    let path = parts.next().map(ToOwned::to_owned);
+    let path = parts.next().and_then(|url| url.parse().ok());
     let version = parts.next().and_then(|w| parse_http_version(w).ok());
 
     method
